@@ -1,0 +1,13 @@
+{%- from "ferm/map.jinja" import ferm_defaults %}
+# File maintained by salt
+# Any changes to this file will be removed
+
+# Default Policy. If required, override in conf.d files.
+# Default apply to both ip4 and ip6.
+domain (ip ip6)
+table filter {
+    chain INPUT policy {{ ferm_defaults.policy.input }};
+    chain OUTPUT policy {{ ferm_defaults.policy.output }};
+    chain FORWARD policy {{ ferm_defaults.policy.forward }};
+}
+@include '/etc/ferm/conf.d/';

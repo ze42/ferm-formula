@@ -1,0 +1,94 @@
+ferm:
+  # Filter table policies accept: auto | accept | drop, defaulting to auto
+  policies:
+    # Not sure there is any use to define policy elsewhere...
+    # But if you do, it would be accepted.
+    filter:
+      input: auto     # auto: accept unless ingress rules are present
+      output: auto    # auto: accept unless egress rules are present
+      forward: auto   # drop... nothing else managed yet
+
+  # Accepts True | False -- auto: True if any conntrack_helper or egress are defiled
+  # Only automaticly add established,related rules if conntrack is activated
+  conntrack: auto
+
+  # conntrack helpers, placeholder rules to ensure they get loaded.
+  conntrack_helper: [amanda, ftp, RAS, 'Q.931', irc, netbison-ns, pptp, sip, snmp, tftp, ]
+
+
+  # Set to false not to have default loopback allow rules
+  accept_loopback: True
+
+  ip6: True  # Set to false to only handle ipv4
+
+  # used by ferm.ipset to help create those sets before applying ferm
+  # configuration
+  # XXX: not implemented to have them setup outside of ferm yet.
+  modsets:
+    blacklist:
+      type: hash:net
+      family: inet  # inet|inet6
+      timeout: 0
+    blacklist6:
+      type: hash:net
+      family: inet  # inet|inet6
+      timeout: 0
+
+  rules:
+    # Default template used, you can override it if you don't like it
+    template: salt://ferm/templates/security-groups.conf.jinja
+    egress:
+      ssh:
+        protocol: tcp/ssh
+        destination:
+          - 10.0.0.0/8
+          - 192.168.1.1
+          - ip: 8.8.8.8
+        action: accept  # Default, but can be specified, on placed to drop...
+      dns:
+        protocol: udp,tcp/domain
+        destination:
+          # Can be fetch from other pillars at runtime...
+          # Helps not to have to maintain the list at multiple places
+          - pillar: resolver:nameservers
+
+    ingress:
+      0-web-admins:
+        protocol: tcp/http,https
+        source:
+          - 10.0.0.0/8
+          - 192.168.1.1
+      9-blacklist:
+        protocol: any
+        source:
+          - set: blacklist
+            _ip: 4
+          - set: blacklist6
+            _ip: 6
+        action: drop
+      web:
+        _ip: 4
+        protocol: tcp/http,https
+        source:
+          - 10.0.0.0/8
+          - 192.168.1.1
+          - set: blacklist
+            action: drop
+          - 0.0.0.0/0
+      # Alternatively, you can set drop directly in the list...
+      0-ssh:
+        protocol: tcp/http,https
+        source:
+          - 10.0.0.0/8
+          - 192.168.1.1
+          - ip: 172.16.0.0/12
+            action: drop
+          - ip: 192.168.0.0/16
+            action: drop
+          - set: blacklist
+            _ip: 4
+            action: drop
+          - set: blacklist6
+            _ip: 6
+            action: drop
+          - 0.0.0.0/0

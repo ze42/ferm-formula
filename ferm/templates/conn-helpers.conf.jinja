@@ -1,0 +1,21 @@
+# File maintained by salt
+# Any changes to this file will be removed
+#
+# Update pillar: salt:conntrack_helpers
+#
+{%- set helpers = salt['pillar.get']('ferm:conntrack_helpers', []) %}
+{%- if helpers and helpers is string %}
+{%-     set helpers = [helpers, ] %}
+{%- endif %}
+domain ip {
+   table filter {
+      # Just making sure the wanted helpers get loaded
+      chain helpers_placehorder {
+{%- if helpers %}
+          mod helper helper ( {{ helpers|join(' ') }} ) NOP;
+{%- else %}
+#          mod helper helper #-- no helper defined in pillars
+{%- endif %}
+      }
+   }
+}

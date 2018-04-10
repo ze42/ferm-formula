@@ -1,0 +1,46 @@
+# File maintained by salt
+# Any changes to this file will be removed
+#
+# update pillar: ferm:policies:filter:<chain>:<policy>
+# possibly with  ferm:policies:filter:_ip:<4|6>
+{%- set domains_by_ip = {
+    '4': 'ip',
+    4: 'ip',
+    '6': 'ip6',
+    6: 'ip6',
+} %}
+{%- from "ferm/map.jinja" import ferm_defaults %}
+{%- set ferm_info = salt['pillar.get']('ferm', {}) %}
+
+{%- set has_ip6 = ferm_info.get('ip6', ferm_defaults.ip6) %}
+{%- set policies = ferm_info.get('policies', ferm_defaults.policies) %}
+
+{%- for table, chains_info in policies|dictsort %}
+{%-   set domain = domains_by_ip.get(chains_info.get('_ip'), '(ip ip6)') %}
+# {{ table }}
+domain {{ domain }}
+table {{ table }} {
+{%-   for chain, policy in chains_info|dictsort %}
+{%-     if table|upper == 'FILTER' and policy|upper == 'AUTO' %}
+{%-       if chain|upper == 'INPUT' %}
+{%-         if ferm_info.get('rules', {}).get('ingress') %}
+{%-           set policy = 'DROP' %}
+{%-         else %}
+{%-           set policy = 'ACCEPT' %}
+{%-         endif %}
+{%-       elif chain|upper == 'OUTPUT' %}
+{%-         if ferm_info.get('rules', {}).get('egress') %}
+{%-           set policy = 'DROP' %}
+{%-         else %}
+{%-           set policy = 'ACCEPT' %}
+{%-         endif %}
+{%-       else %}{#- FORWARD #}
+{%-         set policy = 'DROP' %}
+{%-       endif %}
+{%-     endif %}
+{%-     if chain != '_ip' %}
+    chain {{ chain|upper }} policy {{ policy|upper }};
+{%-     endif %}
+{%-   endfor %}
+}
+{%- endfor %}

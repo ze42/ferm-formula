@@ -1,0 +1,101 @@
+{%- from "ferm/map.jinja" import ferm_defaults %}
+{%- set ferm_info = salt['pillar.get']('ferm', {}) %}
+{%- set has_v6 = ferm_info.get('ip6', ferm_defaults.ip6) %}
+{%- set rules = ferm_info.get('rules', {}) %}
+
+{%- macro format_action(action) -%}
+{%-   if action|upper in ('ACCEPT', 'DROP', 'REJECT', 'LOG', ) -%}
+        {{ action | upper }}
+{%-   else -%}
+        jump {{ action }}
+{%-   endif -%}
+{%- endmacro %}
+
+
+{%- macro filter_domain(domain) -%}
+{%-   if domain in (4, '4', 'inet', 'inet4', 'ip4', 'ipv4') -%}
+@if @eq($DOMAIN, ip)
+{%-   elif domain in (6, '6', 'inet6', 'ip6', 'ipv6')  -%}
+@if @eq($DOMAIN, ip6)
+{%-   endif %}
+{%- endmacro %}
+
+
+{%- macro build_rules(rules, chain_prefix, target_key, match_ip, match_port, match_set) %}
+    chain {{ chain_prefix }} {
+{%-   for rule_id, info in rules|dictsort %}
+{%-     set default_action = info.get('action', 'accept') %}
+{%-     set protocols = info.get('port', 'any').split('/')[0].split(',') %}
+{%-     set ports = info.get('port', 'any').split('/')[-1].split(',') %}
+        # {{ rule_id }}
+        {%- if '_ip' in info %}
+        {{    filter_domain(info['_ip']) }}
+        {%- endif %}
+        {%   if 'any' in protocols -%}
+        interface + {# something is required for @subchain to work #}
+        {%-  else -%}
+        proto ({{ protocols|join(' ') }})
+        {%-   if 'any' != ports %} {{match_port}} ({{ ports|join(' ') }}) {% endif %}
+        {%-  endif %}@subchain "{{chain_prefix}}_{{ rule_id }}" {
+{%-     for target_info in info.get(target_key, []) %}
+{%-       set comment = '' %}
+{%-       set action = info.get('action', default_action) %}
+{%-       if target_info is mapping %}
+{%-         set comment = target_info.get('comment') %}
+{%-         if 'ip' in target_info %}
+{%-           set target = target_info['ip'] %}
+{%-         elif 'pillar' in target_info %}
+{%-           set target = salt['pillar.get'](target_info['pillar']) %}
+{%-           set comment = "pillar: {}".format(target_info['pillar']) %}
+{%-         elif 'set' in target_info %}
+{%-           set target = None %}
+{%-           set extra = 'mod set set {} {}'.format(target_info['set'], match_set) %}
+{%-         else %}
+{%-           set target = [] %}
+{%-         endif %}
+{%-         set comment = target_info.get('comment', comment) %}
+{%-         if comment %}
+            # {{ comment }}
+{%-         endif %}
+{%-       else %}
+{%-         set target = target_info %}
+{%-       endif %}
+            {%- if '_ip' in target_info %}
+            {{    filter_domain(target_info['_ip']) }}
+            {%- endif %}
+            {%  if target is none %}
+            {{-   extra }}
+            {%- elif 'any' not in target %}
+            {{-   match_ip }} @ipfilter((
+            {%-   if target is string -%}
+            {{-     target }}
+            {%-   else %}
+                {{  target | join('\n') | indent(16) }}
+            {%    endif -%}
+            ))
+            {%- endif %} {{ format_action(action) }};
+{%- endfor %}
+        }
+{%-   endfor %}
+    }
+{%- endmacro %}
+
+{#- XXX: check for reflexive rules? #}
+{%- set ingress = rules.get('ingress') %}
+{%- if ingress %}
+# ingress rules
+domain (ip ip6)
+table filter {
+    chain INPUT jump ingress;
+{{- build_rules(ingress, 'ingress', 'source', 'saddr', 'dport', 'src') }}
+}
+{%- endif %}
+{%- set egress = rules.get('egress') %}
+{%- if egress %}
+# egress rules
+domain (ip ip6)
+table filter {
+    chain OUTPUT jump egress;
+{{- build_rules(egress, 'egress', 'destination', 'daddr', 'dport', 'dst') }}
+}
+{%- endif %}

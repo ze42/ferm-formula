@@ -1,0 +1,16 @@
+{% set ferm_defaults = {
+    'policy': {
+        'input': 'ACCEPT',
+        'output': 'ACCEPT',
+        'forward': 'DROP',
+    },
+    'policies': {
+      'filter': {
+        'input': 'auto',
+        'output': 'auto',
+        'forward': 'auto',
+      },
+    },
+    'ip6': True,
+}
+%}
