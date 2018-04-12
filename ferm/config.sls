@@ -14,7 +14,7 @@ include:
 ferm_{{filename}}:
   file.managed:
     - name: /etc/ferm/{{ filename }}
-    - source: salt://{{slspath}}/templates/{{ templatename }}
+    - source: salt://{{ slspath }}/templates/{{ templatename }}
     - template: jinja
     - makedirs: True
     - onchanges_in:
