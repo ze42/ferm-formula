@@ -27,15 +27,15 @@
 {%-     set protocols = info.get('port', 'any').split('/')[0].split(',') %}
 {%-     set ports = info.get('port', 'any').split('/')[-1].split(',') %}
         # {{ rule_id }}
-        {%- if '_ip' in info %}
+{%-     if '_ip' in info %}
         {{    filter_domain(info['_ip']) }}
-        {%- endif %}
-        {%   if 'any' in protocols -%}
+{%-     endif %}
+{%-     if 'any' in protocols  %}
         interface + {# something is required for @subchain to work #}
-        {%-  else -%}
+{%-     else  %}
         proto ({{ protocols|join(' ') }})
-        {%-   if 'any' != ports %} {{match_port}} ({{ ports|join(' ') }}) {% endif %}
-        {%-  endif %}@subchain "{{chain_prefix}}_{{ rule_id }}" {
+{%-       if 'any' != ports %} {{match_port}} ({{ ports|join(' ') }}) {% endif %}
+{%-     endif %}@subchain "{{chain_prefix}}_{{ rule_id }}" {
 {%-     for target_info in info.get(target_key, []) %}
 {%-       set comment = '' %}
 {%-       set action = info.get('action', default_action) %}
@@ -59,20 +59,21 @@
 {%-       else %}
 {%-         set target = target_info %}
 {%-       endif %}
-            {%- if '_ip' in target_info %}
+{%-       if '_ip' in target_info %}
             {{    filter_domain(target_info['_ip']) }}
-            {%- endif %}
-            {%  if target is none %}
-            {{-   extra }}
-            {%- elif 'any' not in target %}
-            {{-   match_ip }} @ipfilter((
-            {%-   if target is string -%}
-            {{-     target }}
-            {%-   else %}
+{%-       endif %}
+{%-       if target is none %}
+            {{    extra }}
+{%-       elif 'any' not in target %}
+            {{    match_ip }} @ipfilter((
+{%-       if target is string -%}
+            {{      target }}
+{%-        else %}
                 {{  target | join('\n') | indent(16) }}
-            {%    endif -%}
+            {# do indent the closing parents, but only in this case #}
+{%-       endif -%}
             ))
-            {%- endif %} {{ format_action(action) }};
+{%- endif %} {{ format_action(action) }};
 {%- endfor %}
         }
 {%-   endfor %}
