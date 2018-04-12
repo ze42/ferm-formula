@@ -14,3 +14,10 @@
     'ip6': True,
 }
 %}
+{%- set ferm_info = salt['pillar.get']('ferm', {}) %}
+{%- set config = {
+        'ip6': ferm_info.get('ip6', ferm_defaults.ip6),
+        'policies': ferm_info.get('policies', {}),
+        'rules': ferm_info.get('rules', {}),
+    }
+%}

@@ -1,7 +1,6 @@
-{%- from "ferm/map.jinja" import ferm_defaults %}
-{%- set ferm_info = salt['pillar.get']('ferm', {}) %}
-{%- set has_v6 = ferm_info.get('ip6', ferm_defaults.ip6) %}
-{%- set rules = ferm_info.get('rules', {}) %}
+{%- from "ferm/map.jinja" import config %}
+{%- set has_v6 = config.ip6 %}
+{%- set rules = config.rules %}
 
 {%- macro format_action(action) -%}
 {%-   if action|upper in ('ACCEPT', 'DROP', 'REJECT', 'LOG', ) -%}
@@ -84,7 +83,7 @@
 {%- set ingress = rules.get('ingress') %}
 {%- if ingress %}
 # ingress rules
-domain (ip ip6)
+domain (ip {%- if has_v6 %} ip6 {%- endif %})
 table filter {
     chain INPUT jump ingress;
 {{- build_rules(ingress, 'ingress', 'source', 'saddr', 'dport', 'src') }}
