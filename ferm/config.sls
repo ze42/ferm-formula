@@ -22,6 +22,8 @@ ferm_{{filename}}:
 {% endfor %}
 
 # Touch, so reload notice there has been changes...
+# Debian init script uses cache, and only launch ferm to parse configuration if
+# ferm.conf was changed since last generation.
 ferm_baseconfig:
   file.touch:
     - name: /etc/ferm/ferm.conf
