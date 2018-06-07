@@ -25,6 +25,9 @@
 {%-   for rule_id, info in rules|dictsort %}
 {%-     set default_action = info.get('action', 'accept') %}
 {%-     set protocols = info.get('port', 'any').split('/')[0].split(',') %}
+{%-     if 'icmp' in protocols %}
+{%-         set match_port = 'icmp-type' %}
+{%-     endif %}
 {%-     set ports = info.get('port', 'any').split('/')[-1].split(',') %}
         # {{ rule_id }}
 {%-     if '_ip' in info %}
@@ -33,8 +36,8 @@
 {%-     if 'any' in protocols  %}
         interface + {# something is required for @subchain to work #}
 {%-     else  %}
-        proto ({{ protocols|join(' ') }})
-{%-       if 'any' != ports %} {{match_port}} ({{ ports|join(' ') }}) {% endif %}
+        proto ({{ protocols|join(' ') }}) {# space #}
+{%-       if 'any' not in ports %}{{match_port}} ({{ ports|join(' ') }}) {% endif %}
 {%-     endif %}@subchain "{{chain_prefix}}_{{ rule_id }}" {
 {%-     for target_info in info.get(target_key, []) %}
 {%-       set comment = '' %}

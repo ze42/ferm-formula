@@ -75,6 +75,14 @@ ferm:
           - set: blacklist
             action: drop
           - 0.0.0.0/0
+      ping:
+        port: icmp/echo-request
+        source:
+        - any
+      icmp:
+        port: icmp/any
+        source:
+        - 192.168.0.0/16
       # Alternatively, you can set drop directly in the list...
       0-ssh:
         protocol: tcp/http,https
