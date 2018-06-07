@@ -3,7 +3,8 @@
 #
 # Update pillar: salt:conntrack_helpers
 #
-{%- set helpers = salt['pillar.get']('ferm:conntrack_helpers', []) %}
+{%- from "ferm/map.jinja" import config %}
+{%- set helpers = config.conntrack_helpers %}
 {%- if helpers and helpers is string %}
 {%-     set helpers = [helpers, ] %}
 {%- endif %}
@@ -17,5 +18,9 @@ domain ip {
 #          mod helper helper #-- no helper defined in pillars
 {%- endif %}
       }
+{%- if config.conntrack %}
+      chain INPUT mod state state (ESTABLISHED RELATED) ACCEPT;
+      chain OUTPUT mod state state (ESTABLISHED RELATED) ACCEPT;
+{%- endif %}
    }
 }

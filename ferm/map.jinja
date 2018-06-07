@@ -1,4 +1,5 @@
 {% set ferm_defaults = {
+    'accept_loopback': True,
     'policy': {
         'input': 'ACCEPT',
         'output': 'ACCEPT',
@@ -12,12 +13,24 @@
       },
     },
     'ip6': True,
+    'conntrack_helpers': [],
+    'conntrack': 'auto',
 }
 %}
 {%- set ferm_info = salt['pillar.get']('ferm', {}) %}
 {%- set config = {
+        'accept_loopback': ferm_info.get('accept_loopback', ferm_defaults.accept_loopback),
         'ip6': ferm_info.get('ip6', ferm_defaults.ip6),
-        'policies': ferm_info.get('policies', {}),
+        'policies': ferm_info.get('policies', ferm_defaults.policies),
         'rules': ferm_info.get('rules', {}),
+        'conntrack_helpers': ferm_info.get('conntrack_helpers', ferm_defaults.conntrack_helpers),
+        'conntrack': ferm_info.get('conntrack', ferm_defaults.conntrack),
     }
 %}
+{% if config['conntrack'] == 'auto' %}
+{%   if ferm_info.get('conntrack_helpers') or ferm_info.get('rules', {}).get('egress') %}
+{%     do config.update({'conntrack': True, }) %}
+{%   else %}
+{%     do config.update({'conntrack': False, }) %}
+{%   endif %}
+{% endif %}
