@@ -76,6 +76,8 @@
             {# do indent the closing parents, but only in this case #}
 {%-       endif -%}
             ))
+{%- else %}
+           {# No match, just a target, indent it #}
 {%- endif %} {{ format_action(action) }};
 {%- endfor %}
         }
