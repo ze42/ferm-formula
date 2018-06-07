@@ -2,7 +2,8 @@
 ferm
 ====
 
-Install and configure ferm
+Install and configure `ferm <http://ferm.foo-projects.org/>`_ "to maintain 
+complex firewalls".
 
 .. note::
 
