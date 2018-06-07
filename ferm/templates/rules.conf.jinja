@@ -24,11 +24,11 @@
     chain {{ chain_prefix }} {
 {%-   for rule_id, info in rules|dictsort %}
 {%-     set default_action = info.get('action', 'accept') %}
-{%-     set protocols = info.get('port', 'any').split('/')[0].split(',') %}
+{%-     set protocols = info.get('protocol', 'any').split('/')[0].split(',') %}
 {%-     if 'icmp' in protocols %}
 {%-         set match_port = 'icmp-type' %}
 {%-     endif %}
-{%-     set ports = info.get('port', 'any').split('/')[-1].split(',') %}
+{%-     set ports = info.get('protocol', 'any').split('/')[-1].split(',') %}
         # {{ rule_id }}
 {%-     if '_ip' in info %}
         {{    filter_domain(info['_ip']) }}

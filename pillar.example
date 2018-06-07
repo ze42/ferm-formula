@@ -76,11 +76,11 @@ ferm:
             action: drop
           - 0.0.0.0/0
       ping:
-        port: icmp/echo-request
+        protocol: icmp/echo-request
         source:
         - any
       icmp:
-        port: icmp/any
+        protocol: icmp/any
         source:
         - 192.168.0.0/16
       # Alternatively, you can set drop directly in the list...
