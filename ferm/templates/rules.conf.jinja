@@ -41,8 +41,9 @@
 {%-     endif %}@subchain "{{chain_prefix}}_{{ rule_id }}" {
 {%-     for target_info in info.get(target_key, []) %}
 {%-       set comment = '' %}
-{%-       set action = info.get('action', default_action) %}
+{%-       set action = default_action %}
 {%-       if target_info is mapping %}
+{%-         set action = target_info.get('action', default_action) %}
 {%-         set comment = target_info.get('comment') %}
 {%-         if 'ip' in target_info %}
 {%-           set target = target_info['ip'] %}
