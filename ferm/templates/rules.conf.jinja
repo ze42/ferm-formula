@@ -5,6 +5,8 @@
 {%- macro format_action(action) -%}
 {%-   if action|upper in ('ACCEPT', 'DROP', 'REJECT', 'LOG', ) -%}
         {{ action | upper }}
+{%-   elif action.startswith('LOG ') -%}
+        {{ action }}
 {%-   else -%}
         jump {{ action }}
 {%-   endif -%}
