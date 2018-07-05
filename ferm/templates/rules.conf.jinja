@@ -28,7 +28,9 @@
 {%-     set default_action = info.get('action', 'accept') %}
 {%-     set protocols = info.get('protocol', 'any').split('/')[0].split(',') %}
 {%-     if 'icmp' in protocols %}
-{%-         set match_port = 'icmp-type' %}
+{%-         set match_port_ = 'icmp-type' %}
+{%-     else %}
+{%-         set match_port_ = match_port %}
 {%-     endif %}
 {%-     set ports = info.get('protocol', 'any').split('/')[-1].split(',') %}
         # {{ rule_id }}
@@ -39,7 +41,7 @@
         interface + {# something is required for @subchain to work #}
 {%-     else  %}
         proto ({{ protocols|join(' ') }}) {# space #}
-{%-       if 'any' not in ports %}{{match_port}} ({{ ports|join(' ') }}) {% endif %}
+{%-       if 'any' not in ports %}{{match_port_}} ({{ ports|join(' ') }}) {% endif %}
 {%-     endif %}@subchain "{{chain_prefix}}_{{ rule_id }}" {
 {%-     for target_info in info.get(target_key, []) %}
 {%-       set comment = '' %}
