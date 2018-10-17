@@ -5,7 +5,7 @@
    'conf.d/50-rules.conf': 'rules.conf.jinja',
 }
 %}
-
+{% set ferm_extra = salt['pillar.get']('ferm:extra') or {} %}
 
 include:
   - .service
@@ -20,6 +20,30 @@ ferm_{{filename}}:
     - onchanges_in:
       - file: ferm_baseconfig
 {% endfor %}
+
+{% for basename, config in ferm_extra.items()|sort %}
+ferm_extra_{{ basename }}:
+  file.managed:
+    - name: /etc/ferm/conf.d/{{ basename }}.conf
+{% if 'contents' in config %}
+    - template: jinja
+    - contents: {{ config.contents|json }}
+{% elif 'source' in config %}
+{%   if '://' in config.source %}
+    - source: {{ config.source }}
+{%   elif config.source.startswith('/') %}
+    - source: salt:/{{ config.source }}
+{%   else %}
+    - source: salt://{{ slspath }}/{{ config.source }}
+{%   endif %}
+{% else %}
+    - contents: "# No source or contents found in pillar"
+{% endif %}
+    - makedirs: True
+    - onchanges_in:
+      - file: ferm_baseconfig
+{% endfor %}
+
 
 # Touch, so reload notice there has been changes...
 # Debian init script uses cache, and only launch ferm to parse configuration if

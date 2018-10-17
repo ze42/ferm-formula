@@ -100,3 +100,21 @@ ferm:
             _ip: 6
             action: drop
           - 0.0.0.0/0
+  extra:
+    # extra files to place in ferm.d (.conf appended)
+    05-f2b-sshd:
+      # direct explicit contents
+      contents: |
+        domain ip
+        table filter
+        chain INPUT
+        proto tcp mod multiport destination-ports 22
+        @subchain "f2b-sshd" { RETURN; }
+
+    06-foo:
+      # source with explicit scheme specified
+      source: salt://ferm/templates/foo.jinja
+
+    07-bar:
+      # source with implicit relative to ferm
+      source: bar.jinja
