@@ -111,7 +111,7 @@ table filter {
 {%- set egress = rules.get('egress') %}
 {%- if egress %}
 # egress rules
-domain (ip ip6)
+domain (ip {%- if has_v6 %} ip6{%- endif %})
 table filter {
 {%- if config.accept_loopback %}
     chain OUTPUT outerface lo ACCEPT;
