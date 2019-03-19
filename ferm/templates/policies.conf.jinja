@@ -1,8 +1,9 @@
-# File maintained by salt
+# File maintained by salt ferm-formula
 # Any changes to this file will be removed
 #
 # update pillar: ferm:policies:filter:<chain>:<policy>
 # possibly with  ferm:policies:filter:_ip:<4|6>
+#
 {%- from "ferm/map.jinja" import config %}
 
 {%- macro domains_by_ip(domain) %}

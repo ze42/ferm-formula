@@ -1,3 +1,8 @@
+# File maintained by salt ferm-formula
+# Any changes to this file will be removed
+#
+# Update pillar: ferm:rules:ingress and ferm:rules:egress
+#
 {%- from "ferm/map.jinja" import config %}
 {%- set has_v6 = config.ip6 %}
 {%- set rules = config.rules %}
