@@ -25,8 +25,8 @@ ferm_{{filename}}:
 ferm_extra_{{ basename }}:
   file.managed:
     - name: /etc/ferm/conf.d/{{ basename }}.conf
-{% if 'contents' in config %}
     - template: jinja
+{% if 'contents' in config %}
     - contents: {{ config.contents|json }}
 {% elif 'source' in config %}
 {%   if '://' in config.source %}
