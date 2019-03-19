@@ -100,6 +100,31 @@ ferm:
             _ip: 6
             action: drop
           - 0.0.0.0/0
+    prerouting:
+      10-ssh-self:
+        destination:
+        - ip: 1.2.3.4
+        proto: tcp/2201
+        action: redirect
+      11-ssh-front1:
+        destination:
+        - ip: 1.2.3.4
+        proto: tcp/2202
+        action: dnat to 192.168.1.2
+      12-ssh-front2:
+        destination:
+        - ip: 1.2.3.4
+        proto: tcp/2203
+        action: dnat to 192.168.1.3
+    postrouting:
+      10-out-front1:
+        source:
+        - ip: 192.168.1.2
+        action: snat to 1.2.3.4
+      90-out-default:
+        source:
+        - ip: 192.168.1.0/24
+        action: masquerade
   extra:
     # extra files to place in ferm.d (.conf appended)
     05-f2b-sshd:

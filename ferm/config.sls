@@ -3,6 +3,7 @@
    'conf.d/10-policies.conf': 'policies.conf.jinja',
    'conf.d/20-conn-helpers.conf': 'conn-helpers.conf.jinja',
    'conf.d/50-rules.conf': 'rules.conf.jinja',
+   'conf.d/49-nat.conf': 'nat.conf.jinja',
 }
 %}
 {% set ferm_extra = salt['pillar.get']('ferm:extra') or {} %}

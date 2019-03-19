@@ -1,0 +1,119 @@
+# File maintained by salt ferm-formula
+# Any changes to this file will be removed
+#
+# Update pillar: ferm:rules:prerouting and ferm:rules:postrouting
+#
+{%- from "ferm/map.jinja" import config %}
+{%- set has_v6 = config.ip6 %}
+{%- set rules = config.rules %}
+
+{%- set builtin_actions = (
+        'ACCEPT', 'DROP', 'LOG',
+        'DNAT', 'NETMAP', 'REDIRECT',
+        'SNAT', 'MASQUERADE', 'NETMAP',
+) %}
+
+{%- macro format_action(action, default_target) -%}
+{%-   if action.partition(' ')[0]|upper in builtin_actions -%}
+        {{ action.partition(' ')[0]|upper }}{{ ''.join(action.partition(' ')[1:]) }}
+{%-   else -%}
+        jump {{ action }}
+{%-   endif -%}
+{%- endmacro %}
+
+
+{%- macro filter_domain(domain) -%}
+{%-   if domain in (4, '4', 'inet', 'inet4', 'ip4', 'ipv4') -%}
+@if @eq($DOMAIN, ip)
+{%-   elif domain in (6, '6', 'inet6', 'ip6', 'ipv6')  -%}
+@if @eq($DOMAIN, ip6)
+{%-   endif %}
+{%- endmacro %}
+
+
+{%- macro build_rules(rules, chain_prefix, target_key, match_ip, match_port, match_set, default_target) %}
+    chain {{ chain_prefix }} {
+{%-   for rule_id, info in rules|dictsort %}
+{%-     set default_action = info.get('action', 'accept') %}
+{%-     set protocols = info.get('protocol', 'any').split('/')[0].split(',') %}
+{%-     if 'icmp' in protocols %}
+{%-         set match_port_ = 'icmp-type' %}
+{%-     else %}
+{%-         set match_port_ = match_port %}
+{%-     endif %}
+{%-     set ports = info.get('protocol', 'any').split('/')[-1].split(',') %}
+        # {{ rule_id }}
+{%-     if '_ip' in info %}
+        {{    filter_domain(info['_ip']) }}
+{%-     endif %}
+{%-     if 'any' in protocols  %}
+        interface + {# something is required for @subchain to work #}
+{%-     else  %}
+        proto ({{ protocols|join(' ') }}) {# space #}
+{%-       if 'any' not in ports %}{{match_port_}} ({{ ports|join(' ') }}) {% endif %}
+{%-     endif %}@subchain "{{chain_prefix}}_{{ rule_id }}" {
+{%-     for target_info in info.get(target_key, []) %}
+{%-       set comment = '' %}
+{%-       set action = default_action %}
+{%-       if target_info is mapping %}
+{%-         set action = target_info.get('action', default_action) %}
+{%-         set comment = target_info.get('comment') %}
+{%-         if 'ip' in target_info %}
+{%-           set target = target_info['ip'] %}
+{%-         elif 'pillar' in target_info %}
+{%-           set target = salt['pillar.get'](target_info['pillar']) %}
+{%-           set comment = "pillar: {}".format(target_info['pillar']) %}
+{%-         elif 'set' in target_info %}
+{%-           set target = None %}
+{%-           set extra = 'mod set set {} {}'.format(target_info['set'], match_set) %}
+{%-         else %}
+{%-           set target = [] %}
+{%-         endif %}
+{%-         set comment = target_info.get('comment', comment) %}
+{%-         if comment %}
+            # {{ comment }}
+{%-         endif %}
+{%-       else %}
+{%-         set target = target_info %}
+{%-       endif %}
+{%-       if '_ip' in target_info %}
+            {{    filter_domain(target_info['_ip']) }}
+{%-       endif %}
+{%-       if target is none %}
+            {{    extra }}
+{%-       elif 'any' not in target %}
+            {{    match_ip }} @ipfilter((
+{%-       if target is string -%}
+            {{      target }}
+{%-        else %}
+                {{  target | join('\n') | indent(16) }}
+            {# do indent the closing parents, but only in this case #}
+{%-       endif -%}
+            ))
+{%- else %}
+           {# No match, just a target, indent it #}
+{%- endif %} {{ format_action(action) }};
+{%- endfor %}
+        }
+{%-   endfor %}
+    }
+{%- endmacro %}
+
+{%- set prerouting = rules.get('prerouting') %}
+{%- if prerouting %}
+# prerouting rules
+domain (ip)
+table nat {
+    chain PREROUTING jump preroute;
+{{- build_rules(prerouting, 'preroute', 'destination', 'daddr', 'dport', 'dst', 'DNAT') }}
+}
+{%- endif %}
+{%- set postrouting = rules.get('postrouting') %}
+{%- if postrouting %}
+# postrouting rules
+domain (ip)
+table nat {
+    chain POSTROUTING jump postroute;
+{{- build_rules(postrouting, 'postroute', 'source', 'saddr', 'dport', 'src', 'SNAT') }}
+}
+{%- endif %}
