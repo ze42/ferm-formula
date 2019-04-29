@@ -1,0 +1,249 @@
+# File maintained by salt ferm-formula
+# Any changes to this file will be removed
+#
+# Update pillar: ferm:rules:forward
+#
+{%- from "ferm/map.jinja" import config %}
+{%- set has_v6 = config.ip6 %}
+{%- set rules = config.rules %}
+
+{%- set SUB_THRESHOLD = 8 %}
+{%- set builtin_actions = (
+        'ACCEPT', 'DROP', 'LOG',
+        'DNAT', 'NETMAP', 'REDIRECT',
+        'SNAT', 'MASQUERADE', 'NETMAP',
+) %}
+
+{%- set matching_info = {
+    'iface': {
+        'name': 'iface',
+        'option': 'interface',
+    },
+    'oface': {
+        'name': 'oface',
+        'option': 'outerface',
+    },
+    'src': {
+        'name': 'source',
+        'options': {
+           'ip': 'saddr',
+           'set': 'src',
+        },
+    },
+    'dst': {
+        'name': 'destination',
+        'options': {
+           'ip': 'daddr',
+           'set': 'dst',
+        },
+    },
+}
+%}
+{#-
+# Chains:
+#   <chain-name>: [<rule>, ...]
+#}
+{%- set chains = {} %}
+
+{%- macro call_subactions(rule_id, rule, sub_actions, ret_info) %}
+    {{- sub_actions[0](rule_id, rule, sub_actions[1:], ret_info) }}
+{%- endmacro %}
+
+{%- macro get_subrule(rule_id, rule, action, sub_actions) %}
+{%-   set ret_info = {'matches': 1, 'multi_statement': False, } %}
+{%-   set subact = call_subactions(rule_id, rule, sub_actions, ret_info) %}
+{%-   do ret_info.update({'rules': subact}) %}
+{%-   set subchain = rule_id ~ ":" ~ action %}
+{%-   do chains.update({subchain: ret_info}) -%}
+      {{ subchain }}
+{%- endmacro %}
+
+{%- macro rule_passthrough(subchain, ret_info) %}
+{%-    do ret_info.update(chains[subchain]) %}
+      {{- chains.pop(subchain) ['rules'] }}
+{%- endmacro %}
+
+{%- macro add_subrule(subchain, cinfo, force=False) %}
+{%-   set sinfo = chains[subchain] %}
+{%-   if force or sinfo['multi_statement'] or sinfo['matches'] > 1 and cinfo['matches'] > 1 and sinfo['matches'] * cinfo['matches'] > SUB_THRESHOLD -%}
+jump "{{ subchain }}";
+{%-   else -%}
+{%    do cinfo.update({'matches': cinfo['matches'] * sinfo['matches']}) %}
+{{- chains.pop(subchain)['rules']|indent(4) }}
+{%-   endif %}
+{%- endmacro %}
+
+{#-
+# Forward...
+#   Rule
+#   interface
+#     outerface
+#       proto
+#       @subchain
+#        saddr
+#        daddr
+#        action
+#}
+{%- macro format_action(rule_id, rule, sub_actions, ret_info) -%}
+{%- set action = rule.get('action', 'ACCEPT') %}
+{%-   if action.partition(' ')[0]|upper in builtin_actions -%}
+        {{ action.partition(' ')[0]|upper }}{{ action.partition(' ')[1:]|join('') }}
+{%-   else  -%}
+        jump {{ action }}
+{%-   endif -%}
+{%- endmacro %}
+
+{%- macro lst_or_str(data, lst_indent=4) %}
+{%-     if data is string -%}
+            {{ data }}
+{%-        else %}
+{{- ('\n' ~ (data|join('\n')))|indent(lst_indent) }}
+{%        endif -%}
+{%- endmacro %}
+
+{#- info: match info ; rule: current rule we try to match -#}
+{%- macro format_protocol(rule_id, rule, sub_actions, ret_info) -%}
+{%-     set subrule = get_subrule(rule_id, rule, 'proto', sub_actions) %}
+{%-     set protocols = rule.get('protocol', 'any').split('/')[0].split(',') %}
+{%-     if 'any' not in protocols %}{# if any, nothing... so we only have the `not in` part  -#}
+{%-         do ret_info.update({'matches': ret_info['matches'] * (protocols|length)}) -%}
+        proto ({{ protocols|join(' ') }}) {# -#}
+{%-         set ports = rule.get('protocol', 'any').split('/')[-1].split(',') %}
+{%-         if 'any' not in ports %} 
+{%-             if 'icmp' in protocols -%}
+                    icmp-type
+{%-             else -%}
+                    dport
+{%-             endif %}
+{%-             do ret_info.update({'matches': ret_info['matches'] * (ports|length)}) %}
+                {#- #} ({{ ports|join(' ') }})
+{%-         endif %}
+{#- #} {{ add_subrule(subrule, ret_info) }};
+{%-     else %}
+{{-         rule_passthrough(subrule, ret_info) }};
+{%-     endif %}
+{%- endmacro %}
+
+{%- macro format_addr_1(info, options) %}
+{%-             if info is string %}
+{%-                 set info = {'ip': info} %}
+{%-             endif %}
+{%-             if 'comment' in info %}
+# {{ options['ip'] }}: {{ info['comment'] }}
+{%-             endif %}
+{%-             if '_ip' in info %}
+{{    filter_domain(info['_ip']) }}
+{%-             endif %}
+{%-             if 'ip' in info %}
+{{ options['ip'] }} @ipfilter(({{ lst_or_str(info['ip']) }})) {# subrule #}
+{%-             elif 'pillar' in info %}
+# {{ options['ip'] }}: pillar: {{ info['pillar'] }}
+{{ options['ip'] }} @ipfilter(({{ lst_or_str(salt['pillar.get'](info['pillar'])) }})) {# subrule #}
+{%-             elif 'set' in info %}
+{{ 'mod set set {} {}'.format(info['set'], options['set']) }} {# subrule #}
+{%-             else %}
+# {{ options['ip'] }}: Arg, no recognized addr
+{# subrule #}
+{%-             endif %}
+{%- endmacro %}
+
+{%- macro format_addr(rule_id, rule, sub_actions, ret_info, way) %}
+{%-     set subrule = get_subrule(rule_id, rule, way ~ 'addr', sub_actions) %}
+{%-     set info_lst = rule.get(matching_info[way]['name']) %}
+{%-     set options = matching_info[way]['options'] %}
+{%-     if info_lst is string %}
+{%-         set info_lst = [{'ip': info_lst}] %}
+{%-     endif %}
+{%-     if info_lst %}
+{%-         set rules = [] %}
+{%-         do ret_info.update({'matches': 0}) %}
+{%-         for info in info_lst %}
+{%-             do rules.append(format_addr_1(info, options)) %}
+{%-         endfor %}
+{%-         do ret_info.update({'matches': rules|length}) %}
+{%-         if ret_info['matches'] > 1 %}
+{%-             do ret_info.update({'multi_statement': True}) %}
+{%-         endif %}
+{%-         set subcall = add_subrule(subrule, ret_info) %}
+{%-         for rule in rules %}
+                {{- rule }} {{- subcall }}
+{%-         endfor %}
+{%-     else  %}
+          {{- rule_passthrough(subrule, ret_info) }}
+{%-     endif %}
+{%- endmacro %} 
+
+{%- macro format_iface(rule_id, rule, sub_actions, ret_info, way) %}
+{%-     set subrule = get_subrule(rule_id, rule, way, sub_actions) %}
+{%-     set iface = rule.get(matching_info[way]['name']) %}
+{%-     if iface %}
+      {{- matching_info[way]['option'] }} ({{ lst_or_str(iface) }}) {# space #}
+      {{- add_subrule(subrule, ret_info) }}
+{%-     else %}
+      {{- rule_passthrough(subrule, ret_info) }}
+{%-     endif %}
+{%- endmacro %}
+
+{%- macro format_iface_in(rule_id, rule, sub_actions, ret_info) %}
+{{-     format_iface(rule_id, rule, sub_actions, ret_info, 'iface') }}
+{%- endmacro %}
+{%- macro format_iface_out(rule_id, rule, sub_actions, ret_info) %}
+{{-     format_iface(rule_id, rule, sub_actions, ret_info, 'oface') }}
+{%- endmacro %}
+
+{%- macro format_addr_src(rule_id, rule, sub_actions, ret_info) %}
+{{-     format_addr(rule_id, rule, sub_actions, ret_info, 'src') }}
+{%- endmacro %}
+{%- macro format_addr_dst(rule_id, rule, sub_actions, ret_info) %}
+{{-     format_addr(rule_id, rule, sub_actions, ret_info, 'dst') }}
+{%- endmacro %}
+
+
+{%- macro filter_domain(domain) -%}
+{%-   if domain in (4, '4', 'inet', 'inet4', 'ip4', 'ipv4') -%}
+@if @eq($DOMAIN, ip)
+{%-   elif domain in (6, '6', 'inet6', 'ip6', 'ipv6')  -%}
+@if @eq($DOMAIN, ip6)
+{%-   endif %}
+{%- endmacro %}
+
+
+{%- macro build_rules(rules, chain_prefix) %}
+    chain {{ chain_prefix }} {
+{%-   for rule_id, info in rules|dictsort %}
+      # {{ rule_id }}
+{{-       format_iface(matching_info[chain_prefix], rule_id, info) }}
+{%-   endfor %}
+    }
+{%- endmacro %}
+
+{% set actions_list = [
+    format_iface_in,
+    format_iface_out,
+    format_addr_src,
+    format_addr_dst,
+    format_protocol,
+    format_action,
+]
+%}
+
+{%- set forward = rules.get('forward') %}
+{%- if forward %}
+# forward rules
+domain (ip)
+table filter {
+    chain FORWARD jump fwd;
+    chain fwd {
+{%- for rule_id, rule in forward|dictsort %}
+{%-     set ret_info = {'matches': 1, 'multi_statement': False, } %}
+        # {{ rule_id }}
+        {{ call_subactions(rule_id, rule, actions_list, ret_info)|trim|indent(8) }}
+{%- endfor %}
+    }
+{%- for chain_id, chain_info in chains|dictsort %}
+    chain {{ chain_id }} {
+        {{ chain_info['rules']|trim|indent(8) }}
+    }
+{%- endfor %}
+}
+{%- endif %}
