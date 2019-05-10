@@ -10,8 +10,6 @@
 {%- set SUB_THRESHOLD = 8 %}
 {%- set builtin_actions = (
         'ACCEPT', 'DROP', 'LOG',
-        'DNAT', 'NETMAP', 'REDIRECT',
-        'SNAT', 'MASQUERADE', 'NETMAP',
 ) %}
 
 {%- set matching_info = {
@@ -41,7 +39,7 @@
 %}
 {#-
 # Chains:
-#   <chain-name>: [<rule>, ...]
+#   <chain-name>: {'rules': <str:rules>, 'matches': <int:matches>, 'multi_statement': <bool>}
 #}
 {%- set chains = {} %}
 
@@ -87,9 +85,9 @@ jump "{{ subchain }}";
 {%- macro format_action(rule_id, rule, sub_actions, ret_info) -%}
 {%- set action = rule.get('action', 'ACCEPT') %}
 {%-   if action.partition(' ')[0]|upper in builtin_actions -%}
-        {{ action.partition(' ')[0]|upper }}{{ action.partition(' ')[1:]|join('') }}
+        {{ action.partition(' ')[0]|upper }}{{ action.partition(' ')[1:]|join('') }};
 {%-   else  -%}
-        jump {{ action }}
+        jump {{ action }};
 {%-   endif -%}
 {%- endmacro %}
 
@@ -118,9 +116,9 @@ jump "{{ subchain }}";
 {%-             do ret_info.update({'matches': ret_info['matches'] * (ports|length)}) %}
                 {#- #} ({{ ports|join(' ') }})
 {%-         endif %}
-{#- #} {{ add_subrule(subrule, ret_info) }};
+{#- #} {{ add_subrule(subrule, ret_info) }}
 {%-     else %}
-{{-         rule_passthrough(subrule, ret_info) }};
+{{-         rule_passthrough(subrule, ret_info) }}
 {%-     endif %}
 {%- endmacro %}
 
@@ -134,7 +132,10 @@ jump "{{ subchain }}";
 {%-             if '_ip' in info %}
 {{    filter_domain(info['_ip']) }}
 {%-             endif %}
-{%-             if 'ip' in info %}
+{%-             if 'ip' in info and 'any' in info['ip'] %}
+# {{ options['ip'] }}: any
+{# subrule #}
+{%-             elif 'ip' in info %}
 {{ options['ip'] }} @ipfilter(({{ lst_or_str(info['ip']) }})) {# subrule #}
 {%-             elif 'pillar' in info %}
 # {{ options['ip'] }}: pillar: {{ info['pillar'] }}
@@ -208,15 +209,6 @@ jump "{{ subchain }}";
 {%- endmacro %}
 
 
-{%- macro build_rules(rules, chain_prefix) %}
-    chain {{ chain_prefix }} {
-{%-   for rule_id, info in rules|dictsort %}
-      # {{ rule_id }}
-{{-       format_iface(matching_info[chain_prefix], rule_id, info) }}
-{%-   endfor %}
-    }
-{%- endmacro %}
-
 {% set actions_list = [
     format_iface_in,
     format_iface_out,
@@ -230,14 +222,14 @@ jump "{{ subchain }}";
 {%- set forward = rules.get('forward') %}
 {%- if forward %}
 # forward rules
-domain (ip)
+domain (ip ip6)
 table filter {
     chain FORWARD jump fwd;
     chain fwd {
 {%- for rule_id, rule in forward|dictsort %}
 {%-     set ret_info = {'matches': 1, 'multi_statement': False, } %}
-        # {{ rule_id }}
-        {{ call_subactions(rule_id, rule, actions_list, ret_info)|trim|indent(8) }}
+        ## {{ rule_id }}
+        {{ call_subactions('fwd:' ~ rule_id, rule, actions_list, ret_info)|trim|indent(8) }}
 {%- endfor %}
     }
 {%- for chain_id, chain_info in chains|dictsort %}
