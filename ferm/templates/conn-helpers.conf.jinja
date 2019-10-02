@@ -21,6 +21,9 @@ domain ip {
 {%- if config.conntrack %}
       chain INPUT mod state state (ESTABLISHED RELATED) ACCEPT;
       chain OUTPUT mod state state (ESTABLISHED RELATED) ACCEPT;
+{%- if config.get('rules', {}).get('forward') %}
+      chain FORWARD mod state state (ESTABLISHED RELATED) ACCEPT;
+{%- endif %}
 {%- endif %}
    }
 }
